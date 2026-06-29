@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const QUOTE_STATUSES = [
   { id: "waiting_supplier", label: "ממתין למחיר ספק", color: "#f59e0b", icon: "⏳", desc: "טרם קיבלנו מחיר מהספק" },
@@ -135,6 +135,19 @@ function QuoteForm({ initial, onSave, onClose }) {
 export default function QuoteCRM() {
   const [quotes, setQuotes] = useState(initialQuotes);
   const [filterStatus, setFilterStatus] = useState("all");
+
+  // Load data from Google Sheet on startup
+  useEffect(() => {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") return;
+    fetch(APPS_SCRIPT_URL)
+      .then(r => r.json())
+      .then(data => {
+        if (data.quotes && Array.isArray(data.quotes) && data.quotes.length > 0) {
+          setQuotes(data.quotes);
+        }
+      })
+      .catch(e => console.error("Failed to load from Sheet:", e));
+  }, []);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
   const [sortBy, setSortBy] = useState("date");
