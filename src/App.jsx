@@ -18,7 +18,7 @@ const initialQuotes = [
   { id: 5, client: "ליאת גולן", topic: "תאורת LED מחסן", status: "won", suppliers: ["לייטקס"], notes: "", date: "2026-06-10" },
 ];
 
-const APPS_SCRIPT_URL = "REPLACE_WITH_APPS_SCRIPT_URL";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAm88pe-7sN81UQYSfdCdQ5gKJdaSyf0IbOnuXHjCBTP8Z-e-w108KVeiQ0jWRZflPnQ/exec";
 
 async function syncToSheet(quotes) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") return;
