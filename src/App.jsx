@@ -18,6 +18,23 @@ const initialQuotes = [
   { id: 5, client: "ליאת גולן", topic: "תאורת LED מחסן", status: "won", suppliers: ["לייטקס"], notes: "", date: "2026-06-10" },
 ];
 
+const APPS_SCRIPT_URL = "REPLACE_WITH_APPS_SCRIPT_URL";
+
+async function syncToSheet(quotes) {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") return;
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quotes }),
+    });
+  } catch (e) {
+    console.error("Sync to Google Sheet failed:", e);
+  }
+}
+
+
 function StatusBadge({ statusId, size = "md" }) {
   const s = STATUS_MAP[statusId];
   if (!s) return null;
@@ -126,20 +143,20 @@ export default function QuoteCRM() {
 
   function saveQuote(data) {
     if (data.id) {
-      setQuotes(qs => qs.map(q => q.id === data.id ? data : q));
+      setQuotes(qs => { const updated = qs.map(q => q.id === data.id ? data : q); syncToSheet(updated); return updated; });
     } else {
-      setQuotes(qs => [{ ...data, id: Date.now() }, ...qs]);
+      setQuotes(qs => { const updated = [{ ...data, id: Date.now() }, ...qs]; syncToSheet(updated); return updated; });
     }
     closeModal();
   }
 
   function deleteQuote(id) {
-    if (confirm("למחוק הצעה זו?")) setQuotes(qs => qs.filter(q => q.id !== id));
+    if (confirm("למחוק הצעה זו?")) setQuotes(qs => { const updated = qs.filter(q => q.id !== id); syncToSheet(updated); return updated; });
     closeModal();
   }
 
   function changeStatus(id, status) {
-    setQuotes(qs => qs.map(q => q.id === id ? { ...q, status } : q));
+    setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, status } : q); syncToSheet(updated); return updated; });
   }
 
   const filtered = useMemo(() => {
