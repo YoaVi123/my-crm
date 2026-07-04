@@ -35,7 +35,7 @@ async function syncToSheet(quotes, email) {
 
 const ADMIN_EMAIL = "yoav@alpha-lg.com";
 const ALLOWED_DOMAIN = "alpha-lg.com";
-const GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_CLIENT_ID";
+const GOOGLE_CLIENT_ID = "1004123335005-7ls478147cttelsda0eeavbj7o0pd2ue.apps.googleusercontent.com";
 
 function decodeJwt(token) {
   try {
