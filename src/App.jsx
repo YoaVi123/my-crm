@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 const QUOTE_STATUSES = [
   { id: "waiting_supplier", label: "ממתין למחיר ספק", color: "#f59e0b", icon: "⏳", desc: "טרם קיבלנו מחיר מהספק" },
@@ -20,17 +20,73 @@ const initialQuotes = [
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAm88pe-7sN81UQYSfdCdQ5gKJdaSyf0IbOnuXHjCBTP8Z-e-w108KVeiQ0jWRZflPnQ/exec";
 
-async function syncToSheet(quotes) {
+async function syncToSheet(quotes, email) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") return;
   try {
     await fetch(APPS_SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ quotes }),
+      body: JSON.stringify({ quotes, email }),
     });
   } catch (e) {
     console.error("Sync to Google Sheet failed:", e);
   }
+}
+
+const ADMIN_EMAIL = "yoav@alpha-lg.com";
+const ALLOWED_DOMAIN = "alpha-lg.com";
+const GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_CLIENT_ID";
+
+function decodeJwt(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
+function LoginScreen({ onLogin, error }) {
+  const btnRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    function trySetup() {
+      if (cancelled) return;
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response) => {
+            const payload = decodeJwt(response.credential);
+            if (payload) onLogin(payload);
+          },
+        });
+        if (btnRef.current) {
+          window.google.accounts.id.renderButton(btnRef.current, { theme: "outline", size: "large", text: "signin_with", locale: "he" });
+        }
+      } else {
+        setTimeout(trySetup, 200);
+      }
+    }
+    trySetup();
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#f8fafc", direction: "rtl", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
+      <div style={{ fontSize: 40, marginBottom: 10 }}>📋</div>
+      <h2 style={{ marginBottom: 6, color: "#0f172a" }}>מעקב הצעות מחיר</h2>
+      <p style={{ color: "#64748b", marginBottom: 24 }}>יש להתחבר עם חשבון Google של alpha-lg.com</p>
+      <div ref={btnRef}></div>
+      {error && <div style={{ color: "#ef4444", marginTop: 16, fontSize: 13, fontWeight: 600 }}>{error}</div>}
+    </div>
+  );
 }
 
 
@@ -132,23 +188,55 @@ function QuoteForm({ initial, onSave, onClose }) {
 }
 
 export default function QuoteCRM() {
-  const [quotes, setQuotes] = useState(initialQuotes);
+  const [quotes, setQuotes] = useState([]);
   const [filterStatus, setFilterStatus] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState("");
 
-  // Load data from Google Sheet on startup
+  // Restore session (if previously validated in this browser tab)
   useEffect(() => {
+    const saved = sessionStorage.getItem("crm_user");
+    if (saved) {
+      try { setUser(JSON.parse(saved)); } catch (e) {}
+    }
+  }, []);
+
+  function handleLogin(payload) {
+    const email = (payload.email || "").toLowerCase();
+    if (!email.endsWith("@" + ALLOWED_DOMAIN)) {
+      setAuthError("רק משתמשים עם מייל alpha-lg.com יכולים להתחבר");
+      return;
+    }
+    const u = { email, name: payload.name || email, picture: payload.picture || "" };
+    sessionStorage.setItem("crm_user", JSON.stringify(u));
+    setAuthError("");
+    setUser(u);
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem("crm_user");
+    setUser(null);
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      window.google.accounts.id.disableAutoSelect();
+    }
+  }
+
+  // Load data from Google Sheet once logged in
+  useEffect(() => {
+    if (!user) return;
     if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") { setIsLoading(false); return; }
-    fetch(APPS_SCRIPT_URL)
+    setIsLoading(true);
+    fetch(APPS_SCRIPT_URL + "?email=" + encodeURIComponent(user.email))
       .then(r => r.json())
       .then(data => {
-        if (data.quotes && Array.isArray(data.quotes) && data.quotes.length > 0) {
+        if (data.quotes && Array.isArray(data.quotes)) {
           setQuotes(data.quotes);
         }
       })
       .catch(e => console.error("Failed to load from Sheet:", e))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [user]);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
   const [sortBy, setSortBy] = useState("date");
@@ -157,24 +245,29 @@ export default function QuoteCRM() {
 
   function saveQuote(data) {
     if (data.id) {
-      setQuotes(qs => { const updated = qs.map(q => q.id === data.id ? data : q); syncToSheet(updated); return updated; });
+      setQuotes(qs => { const updated = qs.map(q => q.id === data.id ? { ...data, owner: q.owner || user.email } : q); syncToSheet(updated, user.email); return updated; });
     } else {
-      setQuotes(qs => { const updated = [{ ...data, id: Date.now() }, ...qs]; syncToSheet(updated); return updated; });
+      setQuotes(qs => { const updated = [{ ...data, id: Date.now(), owner: user.email }, ...qs]; syncToSheet(updated, user.email); return updated; });
     }
     closeModal();
   }
 
   function deleteQuote(id) {
-    if (confirm("למחוק הצעה זו?")) setQuotes(qs => { const updated = qs.filter(q => q.id !== id); syncToSheet(updated); return updated; });
+    if (confirm("למחוק הצעה זו?")) setQuotes(qs => { const updated = qs.filter(q => q.id !== id); syncToSheet(updated, user.email); return updated; });
     closeModal();
   }
 
   function changeStatus(id, status) {
-    setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, status } : q); syncToSheet(updated); return updated; });
+    setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, status } : q); syncToSheet(updated, user.email); return updated; });
   }
 
+  const visibleQuotes = useMemo(() => {
+    if (!user) return [];
+    return user.email === ADMIN_EMAIL ? quotes : quotes.filter(q => q.owner === user.email);
+  }, [quotes, user]);
+
   const filtered = useMemo(() => {
-    let qs = quotes;
+    let qs = visibleQuotes;
     if (filterStatus !== "all") qs = qs.filter(q => q.status === filterStatus);
     if (search) {
       const q = search.toLowerCase();
@@ -184,14 +277,18 @@ export default function QuoteCRM() {
     if (sortBy === "client") qs = [...qs].sort((a, b) => a.client.localeCompare(b.client));
     if (sortBy === "status") qs = [...qs].sort((a, b) => a.status.localeCompare(b.status));
     return qs;
-  }, [quotes, filterStatus, search, sortBy]);
+  }, [visibleQuotes, filterStatus, search, sortBy]);
 
   const stats = useMemo(() => {
-    const total = quotes.length;
-    const byStatus = Object.fromEntries(QUOTE_STATUSES.map(s => [s.id, quotes.filter(q => q.status === s.id).length]));
-    const noSupplier = quotes.filter(q => q.status === "waiting_supplier" && q.suppliers.length === 0).length;
+    const total = visibleQuotes.length;
+    const byStatus = Object.fromEntries(QUOTE_STATUSES.map(s => [s.id, visibleQuotes.filter(q => q.status === s.id).length]));
+    const noSupplier = visibleQuotes.filter(q => q.status === "waiting_supplier" && q.suppliers.length === 0).length;
     return { total, byStatus, noSupplier };
-  }, [quotes]);
+  }, [visibleQuotes]);
+
+  if (!user) {
+    return <LoginScreen onLogin={handleLogin} error={authError} />;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", direction: "rtl", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
@@ -204,9 +301,18 @@ export default function QuoteCRM() {
             <div style={{ fontSize: 12, color: "#94a3b8" }}>{stats.total} הצעות במערכת</div>
           </div>
         </div>
-        <button onClick={() => setModal({ type: "new" })} style={{ padding: "10px 22px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 14 }}>
-          + הצעה חדשה
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{user.name}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>{user.email}{user.email === ADMIN_EMAIL ? " · אדמין" : ""}</div>
+          </div>
+          <button onClick={handleLogout} style={{ padding: "8px 14px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
+            התנתקות
+          </button>
+          <button onClick={() => setModal({ type: "new" })} style={{ padding: "10px 22px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 14 }}>
+            + הצעה חדשה
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
