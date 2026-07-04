@@ -134,10 +134,11 @@ function QuoteForm({ initial, onSave, onClose }) {
 export default function QuoteCRM() {
   const [quotes, setQuotes] = useState(initialQuotes);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
 
   // Load data from Google Sheet on startup
   useEffect(() => {
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") return;
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") { setIsLoading(false); return; }
     fetch(APPS_SCRIPT_URL)
       .then(r => r.json())
       .then(data => {
@@ -145,7 +146,8 @@ export default function QuoteCRM() {
           setQuotes(data.quotes);
         }
       })
-      .catch(e => console.error("Failed to load from Sheet:", e));
+      .catch(e => console.error("Failed to load from Sheet:", e))
+      .finally(() => setIsLoading(false));
   }, []);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
@@ -208,6 +210,12 @@ export default function QuoteCRM() {
       </div>
 
       <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
+        {isLoading && (
+          <div style={{ background: "#eff6ff", border: "1.5px solid #3b82f6", borderRadius: 10, padding: "12px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+            <span style={{ fontSize: 18 }}>⏳</span>
+            <span style={{ color: "#1d4ed8", fontWeight: 600 }}>טוען נתונים מהגיליון...</span>
+          </div>
+        )}
         {/* Stats Cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
           {QUOTE_STATUSES.map(s => (
