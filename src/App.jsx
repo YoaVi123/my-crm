@@ -127,7 +127,7 @@ function Field({ label, children }) {
 
 const inputStyle = { width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, color: "#0f172a", outline: "none", background: "#f8fafc", boxSizing: "border-box", fontFamily: "inherit" };
 
-function QuoteForm({ initial, onSave, onClose }) {
+function QuoteForm({ initial, onSave, onClose, clientOptions = [], supplierOptions = [] }) {
   const empty = { client: "", topic: "", status: "waiting_supplier", suppliers: [], notes: "", date: new Date().toISOString().slice(0, 10) };
   const [form, setForm] = useState(initial || empty);
   const [supplierInput, setSupplierInput] = useState("");
@@ -148,7 +148,10 @@ function QuoteForm({ initial, onSave, onClose }) {
   return (
     <>
       <Field label="שם לקוח *">
-        <input style={inputStyle} value={form.client} onChange={set("client")} placeholder="שם הלקוח" />
+        <input style={inputStyle} value={form.client} onChange={set("client")} placeholder="שם הלקוח" list="client-options-list" />
+        <datalist id="client-options-list">
+          {clientOptions.map(c => <option key={c} value={c} />)}
+        </datalist>
       </Field>
       <Field label="נושא ההצעה *">
         <input style={inputStyle} value={form.topic} onChange={set("topic")} placeholder="תיאור קצר של הבקשה" />
@@ -163,7 +166,10 @@ function QuoteForm({ initial, onSave, onClose }) {
       </Field>
       <Field label="ספקים מעורבים">
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input style={{ ...inputStyle, flex: 1 }} value={supplierInput} onChange={e => setSupplierInput(e.target.value)} placeholder="שם ספק" onKeyDown={e => e.key === "Enter" && addSupplier()} />
+          <input style={{ ...inputStyle, flex: 1 }} value={supplierInput} onChange={e => setSupplierInput(e.target.value)} placeholder="שם ספק" onKeyDown={e => e.key === "Enter" && addSupplier()} list="supplier-options-list" />
+          <datalist id="supplier-options-list">
+            {supplierOptions.map(s => <option key={s} value={s} />)}
+          </datalist>
           <button onClick={addSupplier} style={{ padding: "9px 16px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>+ הוסף</button>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -265,6 +271,18 @@ export default function QuoteCRM() {
     if (!user) return [];
     return user.email === ADMIN_EMAIL ? quotes : quotes.filter(q => q.owner === user.email);
   }, [quotes, user]);
+
+  const clientOptions = useMemo(() => {
+    const set = new Set();
+    visibleQuotes.forEach(q => { if (q.client) set.add(q.client); });
+    return Array.from(set);
+  }, [visibleQuotes]);
+
+  const supplierOptions = useMemo(() => {
+    const set = new Set();
+    visibleQuotes.forEach(q => { (q.suppliers || []).forEach(s => { if (s) set.add(s); }); });
+    return Array.from(set);
+  }, [visibleQuotes]);
 
   const filtered = useMemo(() => {
     let qs = visibleQuotes;
@@ -400,13 +418,13 @@ export default function QuoteCRM() {
 
       {modal?.type === "new" && (
         <Modal title="הצעת מחיר חדשה" onClose={closeModal}>
-          <QuoteForm onSave={saveQuote} onClose={closeModal} />
+          <QuoteForm onSave={saveQuote} onClose={closeModal} clientOptions={clientOptions} supplierOptions={supplierOptions} />
         </Modal>
       )}
 
       {modal?.type === "edit" && (
         <Modal title="עריכת הצעה" onClose={closeModal}>
-          <QuoteForm initial={modal.quote} onSave={q => saveQuote({ ...q, id: modal.quote.id })} onClose={closeModal} />
+          <QuoteForm initial={modal.quote} onSave={q => saveQuote({ ...q, id: modal.quote.id })} onClose={closeModal} clientOptions={clientOptions} supplierOptions={supplierOptions} />
         </Modal>
       )}
 
