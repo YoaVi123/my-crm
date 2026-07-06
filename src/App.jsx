@@ -33,7 +33,7 @@ async function syncToSheet(quotes, email) {
   }
 }
 
-const ADMIN_EMAIL = "yoav@alpha-lg.com";
+const ADMIN_EMAILS = ["yoav@alpha-lg.com", "einatb@alpha-lg.com"];
 const ALLOWED_DOMAIN = "alpha-lg.com";
 const GOOGLE_CLIENT_ID = "1004123335005-7ls478147cttelsda0eeavbj7o0pd2ue.apps.googleusercontent.com";
 
@@ -249,11 +249,11 @@ export default function QuoteCRM() {
 
   const closeModal = () => setModal(null);
 
-  function saveQuote(data) {
+    function saveQuote(data) {
     if (data.id) {
-      setQuotes(qs => { const updated = qs.map(q => q.id === data.id ? { ...data, owner: q.owner || user.email } : q); syncToSheet(updated, user.email); return updated; });
+      setQuotes(qs => { const updated = qs.map(q => q.id === data.id ? { ...data, owner: q.owner || user.email, ownerName: q.ownerName || user.name } : q); syncToSheet(updated, user.email); return updated; });
     } else {
-      setQuotes(qs => { const updated = [{ ...data, id: Date.now(), owner: user.email }, ...qs]; syncToSheet(updated, user.email); return updated; });
+      setQuotes(qs => { const updated = [{ ...data, id: Date.now(), owner: user.email, ownerName: user.name }, ...qs]; syncToSheet(updated, user.email); return updated; });
     }
     closeModal();
   }
@@ -267,10 +267,12 @@ export default function QuoteCRM() {
     setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, status } : q); syncToSheet(updated, user.email); return updated; });
   }
 
+    const isAdmin = !!user && ADMIN_EMAILS.includes(user.email);
+
   const visibleQuotes = useMemo(() => {
     if (!user) return [];
-    return user.email === ADMIN_EMAIL ? quotes : quotes.filter(q => q.owner === user.email);
-  }, [quotes, user]);
+    return isAdmin ? quotes : quotes.filter(q => q.owner === user.email);
+  }, [quotes, user, isAdmin]);
 
   const clientOptions = useMemo(() => {
     const set = new Set();
@@ -322,7 +324,7 @@ export default function QuoteCRM() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{user.name}</div>
-            <div style={{ fontSize: 11, color: "#94a3b8" }}>{user.email}{user.email === ADMIN_EMAIL ? " · אדמין" : ""}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>{user.email}{isAdmin ? " · אדמין" : ""}</div>
           </div>
           <button onClick={handleLogout} style={{ padding: "8px 14px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
             התנתקות
@@ -376,13 +378,14 @@ export default function QuoteCRM() {
 
         {/* Table */}
         <div style={{ background: "#fff", borderRadius: 14, boxShadow: "0 1px 6px #0001", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 12, fontWeight: 700, color: "#64748b", gap: 12 }}>
-            <span>לקוח</span>
-            <span>נושא ההצעה</span>
-            <span>ספקים</span>
-            <span>סטטוס</span>
-            <span>תאריך</span>
-          </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 12, fontWeight: 700, color: "#64748b", gap: 12 }}>
+          <span>לקוח</span>
+          <span>נושא ההצעה</span>
+          <span>ספקים</span>
+          <span>סטטוס</span>
+          <span>תאריך</span>
+          {isAdmin && <span>נוצר ע"י</span>}
+        </div>
 
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", padding: 50, color: "#94a3b8", fontSize: 15 }}>לא נמצאו הצעות</div>
@@ -393,7 +396,7 @@ export default function QuoteCRM() {
             return (
               <div key={q.id}
                 onClick={() => setModal({ type: "view", quote: q })}
-                style={{ display: "grid", gridTemplateColumns: "1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "14px 20px", gap: 12, borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer", background: isUrgent ? "#fffbeb" : "transparent", alignItems: "center", transition: "background 0.15s" }}
+                style={{ display: "grid", gridTemplateColumns: isAdmin ? "1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "14px 20px", gap: 12, borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer", background: isUrgent ? "#fffbeb" : "transparent", alignItems: "center", transition: "background 0.15s" }}
                 onMouseEnter={e => !isUrgent && (e.currentTarget.style.background = "#f8fafc")}
                 onMouseLeave={e => !isUrgent && (e.currentTarget.style.background = "transparent")}
               >
@@ -409,10 +412,11 @@ export default function QuoteCRM() {
                   }
                 </div>
                 <div><StatusBadge statusId={q.status} size="sm" /></div>
-                <div style={{ fontSize: 13, color: "#94a3b8" }}>{q.date}</div>
-              </div>
-            );
-          })}
+                          <div style={{ fontSize: 13, color: "#94a3b8" }}>{q.date}</div>
+          {isAdmin && <div style={{ fontSize: 13, color: "#64748b" }}>{q.ownerName || q.owner || "-"}</div>}
+        </div>
+      );
+    })}
         </div>
       </div>
 
