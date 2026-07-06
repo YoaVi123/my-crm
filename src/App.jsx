@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 
 const QUOTE_STATUSES = [
   { id: "waiting_supplier", label: "ממתין למחיר ספק", color: "#f59e0b", icon: "⏳", desc: "טרם קיבלנו מחיר מהספק" },
-  { id: "sent_to_client", label: "נשלח ללקוח", color: "#3b82f6", icon: "📤", desc: "ענינו ללקוח, מחכים לתשובה" },
+    { id: "sent_to_client", label: "נשלח ללקוח", color: "#3b82f6", icon: "📤", desc: "ענינו ללקוח, מחכים לתשובה" },
+  { id: "agent_price_sent", label: "התקבל מחיר סוכן, שלחו הצעה", color: "#8b5cf6", icon: "📨", desc: "התקבל מחיר מסוכן ונשלחה הצעה ללקוח" },
   { id: "won", label: "זכינו", color: "#10b981", icon: "✅", desc: "" },
   { id: "too_expensive", label: "יקר מדי", color: "#ef4444", icon: "💸", desc: "הלקוח ציין שהמחיר גבוה" },
   { id: "cancelled", label: "בוטל", color: "#94a3b8", icon: "🚫", desc: "" },
@@ -293,9 +294,10 @@ export default function QuoteCRM() {
       const q = search.toLowerCase();
       qs = qs.filter(x => x.client.toLowerCase().includes(q) || x.topic.toLowerCase().includes(q) || x.suppliers.some(s => s.toLowerCase().includes(q)));
     }
-    if (sortBy === "date") qs = [...qs].sort((a, b) => b.date.localeCompare(a.date));
+        if (sortBy === "date") qs = [...qs].sort((a, b) => b.date.localeCompare(a.date));
     if (sortBy === "client") qs = [...qs].sort((a, b) => a.client.localeCompare(b.client));
     if (sortBy === "status") qs = [...qs].sort((a, b) => a.status.localeCompare(b.status));
+    if (sortBy === "owner") qs = [...qs].sort((a, b) => (a.ownerName || a.owner || "").localeCompare(b.ownerName || b.owner || ""));
     return qs;
   }, [visibleQuotes, filterStatus, search, sortBy]);
 
@@ -364,10 +366,11 @@ export default function QuoteCRM() {
         {/* Filters */}
         <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  חיפוש לקוח, נושא, ספק..." style={{ flex: 1, minWidth: 220, padding: "9px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 14, outline: "none", background: "#fff", direction: "rtl" }} />
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 13, background: "#fff", color: "#475569" }}>
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 13, background: "#fff", color: "#475569" }}>
             <option value="date">מיון: תאריך</option>
             <option value="client">מיון: לקוח</option>
             <option value="status">מיון: סטטוס</option>
+            {isAdmin && <option value="owner">מיון: נוצר על ידי</option>}
           </select>
           {filterStatus !== "all" && (
             <button onClick={() => setFilterStatus("all")} style={{ padding: "9px 14px", background: "#f1f5f9", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, color: "#475569", fontWeight: 600 }}>
