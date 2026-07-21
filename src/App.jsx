@@ -247,8 +247,18 @@ export default function QuoteCRM() {
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
   const [sortBy, setSortBy] = useState("date");
+  const [sortDir, setSortDir] = useState("desc");
 
   const closeModal = () => setModal(null);
+
+  function handleSort(col) {
+    if (sortBy === col) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+  }
 
     function saveQuote(data) {
     if (data.id) {
@@ -294,12 +304,13 @@ export default function QuoteCRM() {
       const q = search.toLowerCase();
       qs = qs.filter(x => x.client.toLowerCase().includes(q) || x.topic.toLowerCase().includes(q) || x.suppliers.some(s => s.toLowerCase().includes(q)));
     }
-        if (sortBy === "date") qs = [...qs].sort((a, b) => b.date.localeCompare(a.date));
-    if (sortBy === "client") qs = [...qs].sort((a, b) => a.client.localeCompare(b.client));
-    if (sortBy === "status") qs = [...qs].sort((a, b) => a.status.localeCompare(b.status));
-    if (sortBy === "owner") qs = [...qs].sort((a, b) => (a.ownerName || a.owner || "").localeCompare(b.ownerName || b.owner || ""));
+        const dir = sortDir === "asc" ? 1 : -1;
+    if (sortBy === "date") qs = [...qs].sort((a, b) => dir * a.date.localeCompare(b.date));
+    if (sortBy === "client") qs = [...qs].sort((a, b) => dir * a.client.localeCompare(b.client));
+    if (sortBy === "status") qs = [...qs].sort((a, b) => dir * (STATUS_MAP[a.status]?.label || "").localeCompare(STATUS_MAP[b.status]?.label || ""));
+    if (sortBy === "owner") qs = [...qs].sort((a, b) => dir * (a.ownerName || a.owner || "").localeCompare(b.ownerName || b.owner || ""));
     return qs;
-  }, [visibleQuotes, filterStatus, search, sortBy]);
+  }, [visibleQuotes, filterStatus, search, sortBy, sortDir]);
 
   const stats = useMemo(() => {
     const total = visibleQuotes.length;
@@ -385,9 +396,9 @@ export default function QuoteCRM() {
           <span>לקוח</span>
           <span>נושא ההצעה</span>
           <span>ספקים</span>
-          <span>סטטוס</span>
-          <span>תאריך</span>
-          {isAdmin && <span>נוצר ע"י</span>}
+          <span onClick={() => handleSort("status")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "status" ? "#0f172a" : "#64748b" }}>סטטוס {sortBy === "status" && (sortDir === "asc" ? "▲" : "▼")}</span>
+                    <span onClick={() => handleSort("date")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "date" ? "#0f172a" : "#64748b" }}>תאריך {sortBy === "date" && (sortDir === "asc" ? "▲" : "▼")}</span>
+                    {isAdmin && <span onClick={() => handleSort("owner")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "owner" ? "#0f172a" : "#64748b" }}>נוצר ע"י {sortBy === "owner" && (sortDir === "asc" ? "▲" : "▼")}</span>}
         </div>
 
           {filtered.length === 0 && (
