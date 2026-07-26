@@ -129,7 +129,7 @@ function Field({ label, children }) {
 const inputStyle = { width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, color: "#0f172a", outline: "none", background: "#f8fafc", boxSizing: "border-box", fontFamily: "inherit" };
 
 function QuoteForm({ initial, onSave, onClose, clientOptions = [], supplierOptions = [] }) {
-  const empty = { client: "", topic: "", status: "waiting_supplier", suppliers: [], notes: "", date: new Date().toISOString().slice(0, 10) };
+  const empty = { client: "", topic: "", status: "waiting_supplier", suppliers: [], notes: "", date: new Date().toISOString().slice(0, 10), quoteNumber: "" };
   const [form, setForm] = useState(initial || empty);
   const [supplierInput, setSupplierInput] = useState("");
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -155,9 +155,12 @@ function QuoteForm({ initial, onSave, onClose, clientOptions = [], supplierOptio
         </datalist>
       </Field>
       <Field label="נושא ההצעה *">
-        <input style={inputStyle} value={form.topic} onChange={set("topic")} placeholder="תיאור קצר של הבקשה" />
-      </Field>
-      <Field label="תאריך בקשה">
+<input style={inputStyle} value={form.topic} onChange={set("topic")} placeholder="תיאור קצר של הבקשה" />
+</Field>
+<Field label="מספר הצעה">
+<input style={inputStyle} value={form.quoteNumber || ""} onChange={set("quoteNumber")} placeholder="לדוגמה RFQ123" />
+</Field>
+<Field label="תאריך בקשה">
         <input style={inputStyle} type="date" value={form.date} onChange={set("date")} />
       </Field>
       <Field label="סטטוס">
@@ -392,9 +395,10 @@ export default function QuoteCRM() {
 
         {/* Table */}
         <div style={{ background: "#fff", borderRadius: 14, boxShadow: "0 1px 6px #0001", overflow: "hidden" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 12, fontWeight: 700, color: "#64748b", gap: 12 }}>
-          <span>לקוח</span>
-          <span>נושא ההצעה</span>
+                  <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1fr 1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 12, fontWeight: 700, color: "#64748b", gap: 12 }}>
+          <span>מספר הצעה</span>
+<span>לקוח</span>
+<span>נושא ההצעה</span>
           <span>ספקים</span>
           <span onClick={() => handleSort("status")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "status" ? "#0f172a" : "#64748b" }}>סטטוס {sortBy === "status" && (sortDir === "asc" ? "▲" : "▼")}</span>
                     <span onClick={() => handleSort("date")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "date" ? "#0f172a" : "#64748b" }}>תאריך {sortBy === "date" && (sortDir === "asc" ? "▲" : "▼")}</span>
@@ -410,14 +414,15 @@ export default function QuoteCRM() {
             return (
               <div key={q.id}
                 onClick={() => setModal({ type: "view", quote: q })}
-                style={{ display: "grid", gridTemplateColumns: isAdmin ? "1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "14px 20px", gap: 12, borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer", background: isUrgent ? "#fffbeb" : "transparent", alignItems: "center", transition: "background 0.15s" }}
+                style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1fr 1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "14px 20px", gap: 12, borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer", background: isUrgent ? "#fffbeb" : "transparent", alignItems: "center", transition: "background 0.15s" }}
                 onMouseEnter={e => !isUrgent && (e.currentTarget.style.background = "#f8fafc")}
                 onMouseLeave={e => !isUrgent && (e.currentTarget.style.background = "transparent")}
               >
-                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>
-                  {isUrgent && <span style={{ marginLeft: 4 }}>⚠️</span>}
-                  {q.client}
-                </div>
+                <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>{q.quoteNumber || "-"}</div>
+<div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>
+{isUrgent && <span style={{ marginLeft: 4 }}>⚠️</span>}
+{q.client}
+</div>
                 <div style={{ color: "#475569", fontSize: 14 }}>{q.topic}</div>
                 <div>
                   {q.suppliers.length === 0
@@ -457,11 +462,15 @@ export default function QuoteCRM() {
               {s.desc && <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>{s.desc}</div>}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-              <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>לקוח</div>
-                <div style={{ fontWeight: 700, color: "#0f172a" }}>{q.client}</div>
-              </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+<div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
+<div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>מספר הצעה</div>
+<div style={{ fontWeight: 700, color: "#0f172a" }}>{q.quoteNumber || "-"}</div>
+</div>
+<div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
+<div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>לקוח</div>
+<div style={{ fontWeight: 700, color: "#0f172a" }}>{q.client}</div>
+</div>
               <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>תאריך בקשה</div>
                 <div style={{ fontWeight: 700, color: "#0f172a" }}>{q.date}</div>
