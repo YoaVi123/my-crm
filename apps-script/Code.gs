@@ -1,7 +1,7 @@
 // Backup of Apps Script Code.gs from script.google.com project
 // Project ID: 1lIYe8fpH5gfq9Tqribrdtv8jFwOt9WBWWE01rYbhaOm93vlwHWjySrD0
 // Owner account: yoav@alpha-lg.com
-// Backed up: 2026-10-07
+// Backed up: 2026-10-08
 
 var ADMIN_EMAIL = "yoav@alpha-lg.com";
 var SHEET_ID = "1aVEZoHxEz7_dTUkO46Kqco177T_Hhv2WOhcKDlajHEY";
@@ -129,7 +129,7 @@ function processRfqEmails() {
     var messages = thread.getMessages(); var matchedAny = false;
     messages.forEach(function (msg) {
       var subject = msg.getSubject() || "";
-      var rfqMatch = subject.match(/RFQ\s*(\d+)/i);
+      var rfqMatch = subject.match(/RFQ\s*(\d+)(?!\d|\s*[x×'’"]|\s*(ft|feet)\b)/i); // ignore '1x20', '40’', '40ft'
       if (!rfqMatch) return; matchedAny = true;
 
       var quoteNumber = "RFQ" + rfqMatch[1];
