@@ -5,7 +5,7 @@
 
 var ADMIN_EMAIL = "yoav@alpha-lg.com";
 var SHEET_ID = "1aVEZoHxEz7_dTUkO46Kqco177T_Hhv2WOhcKDlajHEY";
-var NUM_COLS = 10;
+var NUM_COLS = 11;
 
 function doGet(e) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
@@ -27,7 +27,8 @@ function doGet(e) {
           date: (row[6] instanceof Date ? Utilities.formatDate(row[6], Session.getScriptTimeZone(), "yyyy-MM-dd") : row[6]) || "",
           owner: row[7] || "",
           quoteNumber: row[8] || "",
-          salesNotes: row[9] || ""
+          salesNotes: row[9] || "",
+          reminderAt: (row[10] instanceof Date ? Utilities.formatDate(row[10], Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm") : row[10]) || ""
         };
       });
   }
@@ -67,7 +68,7 @@ function doPost(e) {
       return [
         q.id, q.client || "", q.topic || "", q.status || "",
         Array.isArray(q.suppliers) ? q.suppliers.join(", ") : (q.suppliers || ""),
-        q.notes || "", q.date || "", q.owner || email, q.quoteNumber || "", q.salesNotes || ""
+        q.notes || "", q.date || "", q.owner || email, q.quoteNumber || "", q.salesNotes || "", q.reminderAt || ""
       ];
     });
   } else {
@@ -76,7 +77,7 @@ function doPost(e) {
       return [
         q.id, q.client || "", q.topic || "", q.status || "",
         Array.isArray(q.suppliers) ? q.suppliers.join(", ") : (q.suppliers || ""),
-        q.notes || "", q.date || "", email, q.quoteNumber || "", q.salesNotes || ""
+        q.notes || "", q.date || "", email, q.quoteNumber || "", q.salesNotes || "", q.reminderAt || ""
       ];
     });
     finalRows = others.concat(mine);
@@ -159,6 +160,7 @@ function processRfqEmails() {
         todayStr,
         senderEmail,
         quoteNumber,
+        "",
         ""
       ]);
     });
