@@ -129,7 +129,7 @@ function Field({ label, children }) {
 const inputStyle = { width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, color: "#0f172a", outline: "none", background: "#f8fafc", boxSizing: "border-box", fontFamily: "inherit" };
 
 function QuoteForm({ initial, onSave, onClose, clientOptions = [], supplierOptions = [] }) {
-  const empty = { client: "", topic: "", status: "waiting_supplier", suppliers: [], notes: "", date: new Date().toISOString().slice(0, 10), quoteNumber: "" };
+  const empty = { client: "", topic: "", status: "waiting_supplier", suppliers: [], notes: "", salesNotes: "", date: new Date().toISOString().slice(0, 10), quoteNumber: "" };
   const [form, setForm] = useState(initial || empty);
   const [supplierInput, setSupplierInput] = useState("");
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -189,11 +189,43 @@ function QuoteForm({ initial, onSave, onClose, clientOptions = [], supplierOptio
       <Field label="הערות">
         <textarea style={{ ...inputStyle, resize: "vertical", minHeight: 70 }} value={form.notes} onChange={set("notes")} placeholder="הערות נוספות..." />
       </Field>
+      <Field label="הערות איש מכירות">
+        <textarea style={{ ...inputStyle, resize: "vertical", minHeight: 70 }} value={form.salesNotes || ""} onChange={set("salesNotes")} placeholder="הערות של איש המכירות..." />
+      </Field>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
         <button onClick={onClose} style={{ padding: "9px 20px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>ביטול</button>
         <button onClick={() => form.client && form.topic && onSave(form)} style={{ padding: "9px 22px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>שמירה</button>
       </div>
     </>
+  );
+}
+
+function SalesNotesBox({ value, onSave }) {
+  const [text, setText] = useState(value);
+  const [saved, setSaved] = useState(false);
+  const dirty = text !== value;
+  function save() {
+    onSave(text);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8 }}>הערות איש מכירות</div>
+      <textarea
+        style={{ ...inputStyle, resize: "vertical", minHeight: 80 }}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="הוסף הערה (שיחה עם הלקוח, מעקב, מחיר יעד...)"
+      />
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 8 }}>
+        {saved && <span style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>✓ נשמר</span>}
+        <button onClick={save} disabled={!dirty}
+          style={{ padding: "7px 18px", background: dirty ? "#6366f1" : "#e2e8f0", color: dirty ? "#fff" : "#94a3b8", border: "none", borderRadius: 8, cursor: dirty ? "pointer" : "default", fontWeight: 700, fontSize: 13 }}>
+          שמירת הערה
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -275,6 +307,10 @@ export default function QuoteCRM() {
   function deleteQuote(id) {
     if (confirm("למחוק הצעה זו?")) setQuotes(qs => { const updated = qs.filter(q => q.id !== id); syncToSheet(updated, user.email); return updated; });
     closeModal();
+  }
+
+  function saveSalesNotes(id, salesNotes) {
+    setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, salesNotes } : q); syncToSheet(updated, user.email); return updated; });
   }
 
   function changeStatus(id, status) {
@@ -494,6 +530,8 @@ export default function QuoteCRM() {
                 📝 {q.notes}
               </div>
             )}
+
+            <SalesNotesBox key={q.id} value={q.salesNotes || ""} onSave={v => saveSalesNotes(q.id, v)} />
 
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 10 }}>שנה סטטוס מהיר</div>
