@@ -498,6 +498,8 @@ export default function QuoteCRM() {
               {s.desc && <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>{s.desc}</div>}
             </div>
 
+            <SalesNotesBox key={q.id} value={q.salesNotes || ""} onSave={v => saveSalesNotes(q.id, v)} />
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
 <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
 <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>מספר הצעה</div>
@@ -530,8 +532,6 @@ export default function QuoteCRM() {
                 📝 {q.notes}
               </div>
             )}
-
-            <SalesNotesBox key={q.id} value={q.salesNotes || ""} onSave={v => saveSalesNotes(q.id, v)} />
 
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 10 }}>שנה סטטוס מהיר</div>
