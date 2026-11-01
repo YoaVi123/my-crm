@@ -200,6 +200,73 @@ function QuoteForm({ initial, onSave, onClose, clientOptions = [], supplierOptio
   );
 }
 
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function formatReminder(at) {
+  const d = new Date(at);
+  if (isNaN(d)) return at;
+  return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+
+function toCalStamp(d) {
+  return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + "T" + pad2(d.getHours()) + pad2(d.getMinutes()) + "00";
+}
+
+function buildCalendarUrl(q, reminderAt, text, email) {
+  const start = new Date(reminderAt);
+  const end = new Date(start.getTime() + 30 * 60 * 1000);
+  const title = "תזכורת: " + (q.quoteNumber ? q.quoteNumber + " - " : "") + (q.client || "") + (text ? " - " + text : "");
+  const details = [
+    q.quoteNumber && "מספר הצעה: " + q.quoteNumber,
+    "לקוח: " + (q.client || ""),
+    "נושא: " + (q.topic || ""),
+    "סטטוס: " + (STATUS_MAP[q.status]?.label || ""),
+    text && "הערה לתזכורת: " + text,
+    q.salesNotes && "הערות איש מכירות: " + q.salesNotes,
+    "",
+    "פתיחת ה-CRM: https://yoavi123.github.io/my-crm/",
+  ].filter(x => x !== false && x !== undefined && x !== null).join("\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title,
+    dates: toCalStamp(start) + "/" + toCalStamp(end),
+    ctz: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Jerusalem",
+    details,
+  });
+  if (email) params.set("authuser", email);
+  return "https://calendar.google.com/calendar/render?" + params.toString();
+}
+
+function ReminderForm({ quote, onSave, onClose }) {
+  const defaultAt = (() => {
+    const existing = quote.reminderAt ? new Date(quote.reminderAt) : null;
+    const d = existing && !isNaN(existing) ? existing : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (existing && !isNaN(existing)) return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T09:00";
+  })();
+  const [at, setAt] = useState(defaultAt);
+  const [text, setText] = useState("");
+  return (
+    <>
+      <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
+        {quote.quoteNumber ? quote.quoteNumber + " · " : ""}{quote.client} · {quote.topic}
+      </div>
+      <Field label="תאריך ושעה *">
+        <input style={inputStyle} type="datetime-local" value={at} onChange={e => setAt(e.target.value)} />
+      </Field>
+      <Field label="על מה להזכיר (לא חובה)">
+        <input style={inputStyle} value={text} onChange={e => setText(e.target.value)} placeholder="לדוגמה: לחזור ללקוח לגבי המחיר" />
+      </Field>
+      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14 }}>אחרי השמירה ייפתח Google Calendar עם האירוע מוכן — יש ללחוץ שם "שמירה".</div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={{ padding: "9px 20px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>ביטול</button>
+        <button onClick={() => at && onSave(at, text.trim())} disabled={!at}
+          style={{ padding: "9px 22px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>שמירה ופתיחה ביומן</button>
+      </div>
+    </>
+  );
+}
+
 function SalesNotesBox({ value, onSave }) {
   const [text, setText] = useState(value);
   const [saved, setSaved] = useState(false);
@@ -309,6 +376,12 @@ export default function QuoteCRM() {
     closeModal();
   }
 
+  function saveReminder(q, reminderAt, text) {
+    setQuotes(qs => { const updated = qs.map(x => x.id === q.id ? { ...x, reminderAt } : x); syncToSheet(updated, user.email); return updated; });
+    window.open(buildCalendarUrl(q, reminderAt, text, user.email), "_blank");
+    closeModal();
+  }
+
   function saveSalesNotes(id, salesNotes) {
     setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, salesNotes } : q); syncToSheet(updated, user.email); return updated; });
   }
@@ -318,6 +391,9 @@ export default function QuoteCRM() {
   }
 
     const isAdmin = !!user && ADMIN_EMAILS.includes(user.email);
+  const gridCols = isAdmin
+    ? "0.9fr 1.1fr 1.5fr 1fr 1.3fr 0.9fr 1.5fr 1fr 1fr"
+    : "0.9fr 1.2fr 1.7fr 1fr 1.4fr 0.9fr 1.6fr 1fr";
 
   const visibleQuotes = useMemo(() => {
     if (!user) return [];
@@ -387,7 +463,7 @@ export default function QuoteCRM() {
         </div>
       </div>
 
-      <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
         {isLoading && (
           <div style={{ background: "#eff6ff", border: "1.5px solid #3b82f6", borderRadius: 10, padding: "12px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
             <span style={{ fontSize: 18 }}>⏳</span>
@@ -431,13 +507,15 @@ export default function QuoteCRM() {
 
         {/* Table */}
         <div style={{ background: "#fff", borderRadius: 14, boxShadow: "0 1px 6px #0001", overflow: "hidden" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1fr 1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 12, fontWeight: 700, color: "#64748b", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: gridCols, padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 12, fontWeight: 700, color: "#64748b", gap: 12 }}>
           <span>מספר הצעה</span>
 <span>לקוח</span>
 <span>נושא ההצעה</span>
           <span>ספקים</span>
           <span onClick={() => handleSort("status")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "status" ? "#0f172a" : "#64748b" }}>סטטוס {sortBy === "status" && (sortDir === "asc" ? "▲" : "▼")}</span>
                     <span onClick={() => handleSort("date")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "date" ? "#0f172a" : "#64748b" }}>תאריך {sortBy === "date" && (sortDir === "asc" ? "▲" : "▼")}</span>
+          <span>הערות איש מכירות</span>
+          <span>תזכורת</span>
                     {isAdmin && <span onClick={() => handleSort("owner")} style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, color: sortBy === "owner" ? "#0f172a" : "#64748b" }}>נוצר ע"י {sortBy === "owner" && (sortDir === "asc" ? "▲" : "▼")}</span>}
         </div>
 
@@ -450,7 +528,7 @@ export default function QuoteCRM() {
             return (
               <div key={q.id}
                 onClick={() => setModal({ type: "view", quote: q })}
-                style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1.3fr 1.7fr 1fr 1.3fr 0.9fr 1.1fr" : "1fr 1.5fr 2fr 1.2fr 1.6fr 1fr", padding: "14px 20px", gap: 12, borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer", background: isUrgent ? "#fffbeb" : "transparent", alignItems: "center", transition: "background 0.15s" }}
+                style={{ display: "grid", gridTemplateColumns: gridCols, padding: "14px 20px", gap: 12, borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer", background: isUrgent ? "#fffbeb" : "transparent", alignItems: "center", transition: "background 0.15s" }}
                 onMouseEnter={e => !isUrgent && (e.currentTarget.style.background = "#f8fafc")}
                 onMouseLeave={e => !isUrgent && (e.currentTarget.style.background = "transparent")}
               >
@@ -468,6 +546,14 @@ export default function QuoteCRM() {
                 </div>
                 <div><StatusBadge statusId={q.status} size="sm" /></div>
                           <div style={{ fontSize: 13, color: "#94a3b8" }}>{q.date}</div>
+                <div title={q.salesNotes || ""} style={{ fontSize: 13, color: q.salesNotes ? "#475569" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }}>{q.salesNotes || "-"}</div>
+                <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                  {q.reminderAt && <span style={{ fontSize: 12, fontWeight: 600, color: new Date(q.reminderAt) < new Date() ? "#94a3b8" : "#0f172a", whiteSpace: "nowrap" }}>{formatReminder(q.reminderAt)}</span>}
+                  <button onClick={() => setModal({ type: "reminder", quote: q })}
+                    style={{ padding: "4px 10px", background: "#eef2ff", color: "#6366f1", border: "1.5px solid #c7d2fe", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
+                    🔔 {q.reminderAt ? "שינוי" : "תזכורת"}
+                  </button>
+                </div>
           {isAdmin && <div style={{ fontSize: 13, color: "#64748b" }}>{q.ownerName || q.owner || "-"}</div>}
         </div>
       );
@@ -484,6 +570,12 @@ export default function QuoteCRM() {
       {modal?.type === "edit" && (
         <Modal title="עריכת הצעה" onClose={closeModal}>
           <QuoteForm initial={modal.quote} onSave={q => saveQuote({ ...q, id: modal.quote.id })} onClose={closeModal} clientOptions={clientOptions} supplierOptions={supplierOptions} />
+        </Modal>
+      )}
+
+      {modal?.type === "reminder" && modal.quote && (
+        <Modal title="🔔 תזכורת ביומן Google" onClose={closeModal} width={420}>
+          <ReminderForm quote={modal.quote} onSave={(at, text) => saveReminder(modal.quote, at, text)} onClose={closeModal} />
         </Modal>
       )}
 
