@@ -21,13 +21,16 @@ const initialQuotes = [
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAm88pe-7sN81UQYSfdCdQ5gKJdaSyf0IbOnuXHjCBTP8Z-e-w108KVeiQ0jWRZflPnQ/exec";
 
-async function syncToSheet(quotes, email) {
+// Sends only what changed: the quotes to add or update, and the ids to delete.
+// The sheet keeps every other row as it is, including RFQs that the email
+// script added after this page was loaded.
+async function syncToSheet({ upsert = [], deleteIds = [] }, email) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "REPLACE_WITH_APPS_SCRIPT_URL") return;
   try {
     await fetch(APPS_SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ quotes, email }),
+      body: JSON.stringify({ upsert, deleteIds, email }),
     });
   } catch (e) {
     console.error("Sync to Google Sheet failed:", e);
@@ -364,30 +367,46 @@ export default function QuoteCRM() {
 
     function saveQuote(data) {
     if (data.id) {
-      setQuotes(qs => { const updated = qs.map(q => q.id === data.id ? { ...data, owner: q.owner || user.email, ownerName: q.ownerName || user.name } : q); syncToSheet(updated, user.email); return updated; });
+      const old = quotes.find(q => q.id === data.id) || {};
+      const changed = { ...data, owner: old.owner || user.email, ownerName: old.ownerName || user.name };
+      setQuotes(qs => qs.map(q => q.id === data.id ? changed : q));
+      syncToSheet({ upsert: [changed] }, user.email);
     } else {
-      setQuotes(qs => { const updated = [{ ...data, id: Date.now(), owner: user.email, ownerName: user.name }, ...qs]; syncToSheet(updated, user.email); return updated; });
+      const added = { ...data, id: Date.now(), owner: user.email, ownerName: user.name };
+      setQuotes(qs => [added, ...qs]);
+      syncToSheet({ upsert: [added] }, user.email);
     }
     closeModal();
   }
 
   function deleteQuote(id) {
-    if (confirm("למחוק הצעה זו?")) setQuotes(qs => { const updated = qs.filter(q => q.id !== id); syncToSheet(updated, user.email); return updated; });
+    if (confirm("למחוק הצעה זו?")) {
+      setQuotes(qs => qs.filter(q => q.id !== id));
+      syncToSheet({ deleteIds: [id] }, user.email);
+    }
     closeModal();
   }
 
   function saveReminder(q, reminderAt, text) {
-    setQuotes(qs => { const updated = qs.map(x => x.id === q.id ? { ...x, reminderAt } : x); syncToSheet(updated, user.email); return updated; });
+    updateQuote(q.id, { reminderAt });
     window.open(buildCalendarUrl(q, reminderAt, text, user.email), "_blank");
     closeModal();
   }
 
   function saveSalesNotes(id, salesNotes) {
-    setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, salesNotes } : q); syncToSheet(updated, user.email); return updated; });
+    updateQuote(id, { salesNotes });
   }
 
   function changeStatus(id, status) {
-    setQuotes(qs => { const updated = qs.map(q => q.id === id ? { ...q, status } : q); syncToSheet(updated, user.email); return updated; });
+    updateQuote(id, { status });
+  }
+
+  function updateQuote(id, fields) {
+    const current = quotes.find(q => q.id === id);
+    if (!current) return;
+    const changed = { ...current, ...fields };
+    setQuotes(qs => qs.map(q => q.id === id ? changed : q));
+    syncToSheet({ upsert: [changed] }, user.email);
   }
 
     const isAdmin = !!user && ADMIN_EMAILS.includes(user.email);
