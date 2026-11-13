@@ -181,7 +181,9 @@ function backfillMissingRfqs() {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var query = 'from:alpha-lg.com subject:RFQ newer_than:' + DAYS + 'd';
+    // No subject:RFQ filter: Gmail treats "RFQ487" as one word, so it would miss it.
+    // The RFQ number is matched in code below.
+    var query = 'from:alpha-lg.com newer_than:' + DAYS + 'd';
     var start = 0, total = 0;
     while (true) {
       var threads = GmailApp.search(query, start, 100);
