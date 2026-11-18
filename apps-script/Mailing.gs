@@ -745,6 +745,7 @@ function confirmUnsubscribe(email, token) {
 // UrlFetchApp.fetch": it asks Google for every permission the mailing module uses.
 function authorizeMailing() {
   UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=x", { muteHttpExceptions: true });
+  console.log("Running as: " + Session.getEffectiveUser().getEmail());
   console.log("Mail quota left today: " + MailApp.getRemainingDailyQuota());
   console.log("Triggers: " + ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }).join(", "));
 }
