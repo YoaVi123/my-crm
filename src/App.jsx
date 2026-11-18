@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import Mailing from "./Mailing.jsx";
 
 const QUOTE_STATUSES = [
   { id: "waiting_supplier", label: "ממתין למחיר ספק", color: "#f59e0b", icon: "⏳", desc: "טרם קיבלנו מחיר מהספק" },
@@ -39,6 +40,8 @@ async function syncToSheet({ upsert = [], deleteIds = [] }, email) {
 
 const ADMIN_EMAILS = ["yoav@alpha-lg.com", "einatb@alpha-lg.com"];
 const ALLOWED_DOMAIN = "alpha-lg.com";
+// Who sees the mailing screen. Must match MAIL_CFG.MAILING_USERS in apps-script/Mailing.gs.
+const MAILING_USERS = ADMIN_EMAILS;
 const GOOGLE_CLIENT_ID = "1004123335005-7ls478147cttelsda0eeavbj7o0pd2ue.apps.googleusercontent.com";
 
 function decodeJwt(token) {
@@ -68,7 +71,7 @@ function LoginScreen({ onLogin, error }) {
           client_id: GOOGLE_CLIENT_ID,
           callback: (response) => {
             const payload = decodeJwt(response.credential);
-            if (payload) onLogin(payload);
+            if (payload) onLogin(payload, response.credential);
           },
         });
         if (btnRef.current) {
@@ -314,13 +317,16 @@ export default function QuoteCRM() {
     }
   }, []);
 
-  function handleLogin(payload) {
+  const [view, setView] = useState("quotes");
+
+  function handleLogin(payload, credential) {
     const email = (payload.email || "").toLowerCase();
     if (!email.endsWith("@" + ALLOWED_DOMAIN)) {
       setAuthError("רק משתמשים עם מייל alpha-lg.com יכולים להתחבר");
       return;
     }
-    const u = { email, name: payload.name || email, picture: payload.picture || "" };
+    // idToken is sent with mailing requests so the server can verify who is asking.
+    const u = { email, name: payload.name || email, picture: payload.picture || "", idToken: credential || "" };
     sessionStorage.setItem("crm_user", JSON.stringify(u));
     setAuthError("");
     setUser(u);
@@ -329,6 +335,7 @@ export default function QuoteCRM() {
   function handleLogout() {
     sessionStorage.removeItem("crm_user");
     setUser(null);
+    setView("quotes");
     if (window.google && window.google.accounts && window.google.accounts.id) {
       window.google.accounts.id.disableAutoSelect();
     }
@@ -410,6 +417,7 @@ export default function QuoteCRM() {
   }
 
     const isAdmin = !!user && ADMIN_EMAILS.includes(user.email);
+  const canMail = !!user && MAILING_USERS.includes(user.email);
   const gridCols = isAdmin
     ? "0.9fr 1.1fr 1.5fr 1fr 1.3fr 0.9fr 1.5fr 1fr 1fr"
     : "0.9fr 1.2fr 1.7fr 1fr 1.4fr 0.9fr 1.6fr 1fr";
@@ -464,9 +472,19 @@ export default function QuoteCRM() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 22 }}>📋</span>
           <div>
-            <div style={{ fontWeight: 900, fontSize: 18, color: "#0f172a", letterSpacing: "-0.5px" }}>מעקב הצעות מחיר</div>
-            <div style={{ fontSize: 12, color: "#94a3b8" }}>{stats.total} הצעות במערכת</div>
+            <div style={{ fontWeight: 900, fontSize: 18, color: "#0f172a", letterSpacing: "-0.5px" }}>{view === "mail" ? "דיוור ללקוחות" : "מעקב הצעות מחיר"}</div>
+            <div style={{ fontSize: 12, color: "#94a3b8" }}>{view === "mail" ? "אנשי קשר, קמפיינים ועדכונים" : stats.total + " הצעות במערכת"}</div>
           </div>
+          {canMail && (
+            <div style={{ display: "flex", gap: 4, marginRight: 18, background: "#f1f5f9", borderRadius: 10, padding: 3 }}>
+              {[{ id: "quotes", label: "📋 הצעות מחיר" }, { id: "mail", label: "✉️ דיוור" }].map(v => (
+                <button key={v.id} onClick={() => setView(v.id)}
+                  style={{ padding: "7px 14px", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13, background: view === v.id ? "#fff" : "transparent", color: view === v.id ? "#0f172a" : "#64748b", boxShadow: view === v.id ? "0 1px 3px #0002" : "none" }}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ textAlign: "right" }}>
@@ -476,12 +494,15 @@ export default function QuoteCRM() {
           <button onClick={handleLogout} style={{ padding: "8px 14px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
             התנתקות
           </button>
-          <button onClick={() => setModal({ type: "new" })} style={{ padding: "10px 22px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 14 }}>
+          {view === "quotes" && <button onClick={() => setModal({ type: "new" })} style={{ padding: "10px 22px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 14 }}>
             + הצעה חדשה
-          </button>
+          </button>}
         </div>
       </div>
 
+      {view === "mail" && canMail ? (
+        <Mailing user={user} apiUrl={APPS_SCRIPT_URL} onAuthExpired={handleLogout} clientNames={clientOptions} />
+      ) : (
       <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
         {isLoading && (
           <div style={{ background: "#eff6ff", border: "1.5px solid #3b82f6", borderRadius: 10, padding: "12px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
@@ -579,6 +600,7 @@ export default function QuoteCRM() {
     })}
         </div>
       </div>
+      )}
 
       {modal?.type === "new" && (
         <Modal title="הצעת מחיר חדשה" onClose={closeModal}>

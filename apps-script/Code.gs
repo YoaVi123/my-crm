@@ -53,6 +53,7 @@ function quoteToRow_(q, owner) {
 }
 
 function doGet(e) {
+  if (e.parameter.action) return handleMailingGet_(e); // Mailing.gs
   var sheet = getSheet_();
   var lastRow = sheet.getLastRow();
   var quotes = [];
@@ -80,6 +81,11 @@ function doGet(e) {
 // Older cached pages still send { email, quotes: [all quotes] }: those rows are
 // upserted and nothing is deleted, so a stale page can never erase rows.
 function doPost(e) {
+  // Mailing requests carry an "action" and are handled in Mailing.gs.
+  var peek = null;
+  try { peek = JSON.parse(e.postData.contents); } catch (err) {}
+  if (peek && peek.action) return handleMailingPost_(peek);
+
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
