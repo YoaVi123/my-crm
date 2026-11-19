@@ -1,5 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import Mailing from "./Mailing.jsx";
+import Mailing, { useIsMobile } from "./Mailing.jsx";
+
+// Installed on the phone's home screen, the login is kept between launches;
+// in a normal browser tab it lasts for that tab only, as before.
+const IS_APP = typeof window !== "undefined" && ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true);
+const userStore = IS_APP ? window.localStorage : window.sessionStorage;
 
 const QUOTE_STATUSES = [
   { id: "waiting_supplier", label: "ממתין למחיר ספק", color: "#f59e0b", icon: "⏳", desc: "טרם קיבלנו מחיר מהספק" },
@@ -311,13 +316,15 @@ export default function QuoteCRM() {
 
   // Restore session (if previously validated in this browser tab)
   useEffect(() => {
-    const saved = sessionStorage.getItem("crm_user");
+    const saved = userStore.getItem("crm_user");
     if (saved) {
       try { setUser(JSON.parse(saved)); } catch (e) {}
     }
   }, []);
 
-  const [view, setView] = useState("quotes");
+  // ?view=mail (the home-screen app opens with it) starts on the mailing screen.
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("view") === "mail" ? "mail" : "quotes"));
+  const isMobile = useIsMobile();
 
   function handleLogin(payload, credential) {
     const email = (payload.email || "").toLowerCase();
@@ -327,18 +334,51 @@ export default function QuoteCRM() {
     }
     // idToken is sent with mailing requests so the server can verify who is asking.
     const u = { email, name: payload.name || email, picture: payload.picture || "", idToken: credential || "" };
-    sessionStorage.setItem("crm_user", JSON.stringify(u));
+    userStore.setItem("crm_user", JSON.stringify(u));
     setAuthError("");
     setUser(u);
   }
 
   function handleLogout() {
-    sessionStorage.removeItem("crm_user");
+    userStore.removeItem("crm_user");
     setUser(null);
     setView("quotes");
     if (window.google && window.google.accounts && window.google.accounts.id) {
       window.google.accounts.id.disableAutoSelect();
     }
+  }
+
+  // A fresh Google sign-in token without logging out (it lasts an hour).
+  // Shows Google's one-tap prompt; resolves when the new token arrives.
+  function reauth() {
+    return new Promise((resolve, reject) => {
+      const g = window.google && window.google.accounts && window.google.accounts.id;
+      if (!g) return reject(new Error("no google"));
+      let done = false;
+      const timer = setTimeout(() => { if (!done) { done = true; reject(new Error("timeout")); } }, 90000);
+      g.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        auto_select: true,
+        use_fedcm_for_prompt: true,
+        callback: (response) => {
+          const payload = decodeJwt(response.credential);
+          if (done || !payload || (payload.email || "").toLowerCase() !== user.email) return;
+          done = true;
+          clearTimeout(timer);
+          const u = { ...user, idToken: response.credential };
+          userStore.setItem("crm_user", JSON.stringify(u));
+          setUser(u);
+          resolve(u);
+        },
+      });
+      g.prompt((n) => {
+        if (!done && n && ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment()))) {
+          done = true;
+          clearTimeout(timer);
+          reject(new Error("prompt not shown"));
+        }
+      });
+    });
   }
 
   // Load data from Google Sheet once logged in
@@ -468,6 +508,17 @@ export default function QuoteCRM() {
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", direction: "rtl", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
       {/* Header */}
+      {isMobile && view === "mail" ? (
+      <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "calc(10px + env(safe-area-inset-top)) 14px 10px", display: "flex", alignItems: "center", gap: 10, position: "sticky", top: 0, zIndex: 40 }}>
+        <span style={{ fontSize: 22 }}>✉️</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 900, fontSize: 17, color: "#0f172a" }}>דיוור ללקוחות</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
+        </div>
+        <button onClick={() => setView("quotes")} style={{ padding: "8px 10px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 12 }}>📋 הצעות</button>
+        <button onClick={handleLogout} style={{ padding: "8px 10px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 12 }}>יציאה</button>
+      </div>
+      ) : (
       <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 40 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 22 }}>📋</span>
@@ -499,9 +550,10 @@ export default function QuoteCRM() {
           </button>}
         </div>
       </div>
+      )}
 
       {view === "mail" && canMail ? (
-        <Mailing user={user} apiUrl={APPS_SCRIPT_URL} onAuthExpired={handleLogout} clientNames={clientOptions} />
+        <Mailing user={user} apiUrl={APPS_SCRIPT_URL} onAuthExpired={handleLogout} onReauth={reauth} clientNames={clientOptions} />
       ) : (
       <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
         {isLoading && (

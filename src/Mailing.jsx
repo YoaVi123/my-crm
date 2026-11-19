@@ -1,26 +1,27 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import MailingMobile from "./MailingMobile.jsx";
 
 // Mailing screen: contacts list, new mailing, history.
 // Talks to the same Apps Script web app as the quotes screen (Mailing.gs),
 // sending the Google sign-in token so the script can check who is asking.
 
-const CONTACT_STATUSES = [
+export const CONTACT_STATUSES = [
   { id: "active", label: "פעיל", color: "#10b981" },
   { id: "candidate", label: "ממתין לאישור", color: "#f59e0b" },
   { id: "unsubscribed", label: "הסיר עצמו", color: "#64748b" },
   { id: "bounced", label: "כתובת שגויה", color: "#ef4444" },
   { id: "rejected", label: "לא לדיוור", color: "#94a3b8" },
 ];
-const CONTACT_STATUS_MAP = Object.fromEntries(CONTACT_STATUSES.map(s => [s.id, s]));
+export const CONTACT_STATUS_MAP = Object.fromEntries(CONTACT_STATUSES.map(s => [s.id, s]));
 
-const CAMPAIGN_TYPES = [
+export const CAMPAIGN_TYPES = [
   { id: "marketing", label: "שיווק וקמפיין", isAd: true },
   { id: "prices", label: "עדכון מחירים", isAd: true },
   { id: "operational", label: "עדכון תפעולי", isAd: false },
 ];
-const CAMPAIGN_TYPE_MAP = Object.fromEntries(CAMPAIGN_TYPES.map(t => [t.id, t]));
+export const CAMPAIGN_TYPE_MAP = Object.fromEntries(CAMPAIGN_TYPES.map(t => [t.id, t]));
 
-const CAMPAIGN_STATUSES = {
+export const CAMPAIGN_STATUSES = {
   draft: { label: "טיוטה", color: "#64748b" },
   sending: { label: "בשליחה", color: "#3b82f6" },
   done: { label: "נשלח", color: "#10b981" },
@@ -31,7 +32,7 @@ const inputStyle = { width: "100%", padding: "9px 12px", border: "1.5px solid #e
 const btn = (bg = "#6366f1", fg = "#fff") => ({ padding: "9px 16px", background: bg, color: fg, border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" });
 const card = { background: "#fff", borderRadius: 14, boxShadow: "0 1px 6px #0001", padding: 20 };
 
-class AuthError extends Error {}
+export class AuthError extends Error {}
 
 function tokenExpired(idToken) {
   try {
@@ -42,7 +43,7 @@ function tokenExpired(idToken) {
   }
 }
 
-function useApi(apiUrl, user) {
+export function useApi(apiUrl, user) {
   return async function api(action, payload = {}) {
     if (!user.idToken || tokenExpired(user.idToken)) throw new AuthError();
     const r = await fetch(apiUrl, {
@@ -57,11 +58,11 @@ function useApi(apiUrl, user) {
   };
 }
 
-function splitTags(t) {
+export function splitTags(t) {
   return String(t || "").split(/[,،;]/).map(x => x.trim()).filter(Boolean);
 }
 
-function audienceOf(contacts, tags) {
+export function audienceOf(contacts, tags) {
   const want = tags || [];
   const seen = new Set();
   return contacts.filter(c => {
@@ -103,7 +104,25 @@ function Pill({ color, children }) {
 
 // ------------------------------------------------------------------ main
 
-export default function Mailing({ user, apiUrl, onAuthExpired, clientNames = [] }) {
+// Phones get their own layout (MailingMobile.jsx); same server, same data.
+export function useIsMobile(max = 760) {
+  const q = "(max-width: " + max + "px)";
+  const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(q);
+    const on = () => setM(mq.matches);
+    mq.addEventListener ? mq.addEventListener("change", on) : mq.addListener(on);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", on) : mq.removeListener(on));
+  }, [q]);
+  return m;
+}
+
+export default function Mailing(props) {
+  const mobile = useIsMobile();
+  return mobile ? <MailingMobile {...props} /> : <MailingDesktop {...props} />;
+}
+
+function MailingDesktop({ user, apiUrl, onAuthExpired, onReauth, clientNames = [] }) {
   const api = useApi(apiUrl, user);
   const [tab, setTab] = useState("contacts");
   const [state, setState] = useState({ contacts: [], campaigns: [], quota: null, sender: "" });
@@ -174,7 +193,7 @@ export default function Mailing({ user, apiUrl, onAuthExpired, clientNames = [] 
       {authLost && (
         <div style={{ background: "#fef2f2", border: "1.5px solid #ef4444", borderRadius: 10, padding: "12px 18px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ color: "#b91c1c", fontWeight: 600 }}>ההתחברות פגה (תוקף של שעה) או שאין לך הרשאה לדיוור. יש להתחבר מחדש.</span>
-          <button onClick={onAuthExpired} style={btn("#ef4444")}>התחברות מחדש</button>
+          <button onClick={() => (onReauth ? onReauth().then(() => { setAuthLost(false); load(); }).catch(onAuthExpired) : onAuthExpired())} style={btn("#ef4444")}>התחברות מחדש</button>
         </div>
       )}
       {error && (
