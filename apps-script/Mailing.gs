@@ -579,7 +579,7 @@ function renderEmail_(camp, contact) {
     "</table></div>";
   var plain = (camp.format === "html" ? String(inner).replace(/<[^>]+>/g, " ") : bodyText) +
     "\n\n--\n" + MAIL_CFG.FOOTER_LINES.join("\n") + "\nלהסרה מרשימת התפוצה: " + unsub;
-  return { html: html, plain: plain, unsub: unsub };
+  return { html: astralToEntities_(html), plain: plain, unsub: unsub };
 }
 
 function sampleContact_(email) {
@@ -591,12 +591,29 @@ function sampleContact_(email) {
   return c || { email: "customer@example.com", name: "ישראל ישראלי", company: "לקוח לדוגמה בע\"מ" };
 }
 
+// GmailApp.sendEmail garbles emoji outside the basic plane (📦 🚚 ...) into "��",
+// so mail goes through MailApp, which keeps them. The HTML also carries every
+// such emoji as a numeric entity, which every mail client shows correctly.
+// GmailApp is used only when a "send as" alias is set (MailApp cannot send from one).
 function sendOne_(camp, contact) {
   var r = renderEmail_(camp, contact);
-  var opts = { htmlBody: r.html, name: MAIL_CFG.SENDER_NAME };
+  var to = normEmail_(contact.email), subject = renderSubject_(camp);
+  if (MAIL_CFG.FROM_ALIAS) {
+    var gopts = { htmlBody: r.html, name: MAIL_CFG.SENDER_NAME, from: MAIL_CFG.FROM_ALIAS };
+    if (MAIL_CFG.REPLY_TO) gopts.replyTo = MAIL_CFG.REPLY_TO;
+    GmailApp.sendEmail(to, subject, r.plain, gopts);
+    return;
+  }
+  var opts = { to: to, subject: subject, body: r.plain, htmlBody: r.html, name: MAIL_CFG.SENDER_NAME };
   if (MAIL_CFG.REPLY_TO) opts.replyTo = MAIL_CFG.REPLY_TO;
-  if (MAIL_CFG.FROM_ALIAS) opts.from = MAIL_CFG.FROM_ALIAS;
-  GmailApp.sendEmail(normEmail_(contact.email), renderSubject_(camp), r.plain, opts);
+  MailApp.sendEmail(opts);
+}
+
+// "📦" -> "&#128230;" for every character outside the basic plane.
+function astralToEntities_(html) {
+  return String(html).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function (pair) {
+    return "&#" + pair.codePointAt(0) + ";";
+  });
 }
 
 function testSend_(camp, user) {
